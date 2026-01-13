@@ -5,8 +5,8 @@ function Footer({
   currentPage,
   totalPages,
   onPageChange,
-  // onZoomIn,
-  // onZoomOut,
+  onZoomIn,
+  onZoomOut,
   // onResetZoom,
   onToggleFullscreen,
   onShare,
@@ -79,21 +79,21 @@ function Footer({
           {/* <div className="w-px h-6 bg-gray-600 mx-1"></div> */}
 
           {/* ZOOM BUTTONS */}
-          {/* <button
+          <button
             onClick={onZoomOut}
             className="p-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded transition"
             title="Thu nhỏ"
           >
             <Minus size={18} />
-          </button> */}
+          </button>
 
-          {/* <button
+          <button
             onClick={onZoomIn}
             className="p-2 text-gray-300 hover:text-white hover:bg-gray-700 rounded transition"
             title="Phóng to"
           >
             <Plus size={18} />
-          </button> */}
+          </button>
 
           <div className="w-px h-6 bg-gray-600 mx-1"></div>
 

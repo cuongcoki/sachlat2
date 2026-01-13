@@ -58,70 +58,53 @@ const PDFBook = () => {
   const [isDragging, setIsDragging] = useState(false);
 
   const isMobile = useMediaQuery({ query: "(max-width: 768px)" });
+  const isTablet = useMediaQuery({ query: "(min-width: 769px) and (max-width: 1024px)" });
 
   // Kích thước responsive thông minh cho mọi màn hình
   const getResponsiveSize = useCallback(() => {
     const containerWidth = window.innerWidth;
     const containerHeight = window.innerHeight;
-
-    // Trừ đi space cho header + footer + padding
-    const HEADER_HEIGHT = 64;
-    const FOOTER_HEIGHT = 56;
-    const PADDING = isMobile ? 16 : 40; // Mobile padding nhỏ hơn
-
-    const availableWidth = containerWidth - (PADDING * 2);
-    const availableHeight = containerHeight - HEADER_HEIGHT - FOOTER_HEIGHT - (PADDING * 2);
-
-    // Tỷ lệ A4 chuẩn
-    const A4_RATIO = 1.414;
-
+    
+    // Trừ đi padding và space cho header/footer
+    const availableWidth = containerWidth - (isMobile ? 40 : 80);
+    const availableHeight = containerHeight - (isMobile ? 200 : 250);
+    
+    // Tính toán dựa trên tỷ lệ A4 (1:1.414)
     let width, height;
-
+    
     if (isMobile) {
-      // Mobile: Ưu tiên chiều rộng để tận dụng tối đa màn hình
-      // Sử dụng gần như toàn bộ width
+      // Mobile: ưu tiên chiều rộng
       width = availableWidth;
-      height = width * A4_RATIO;
-
-      // Nếu quá cao, scale lại nhưng giữ width tối đa
+      height = width * 1.414;
+      
+      // Nếu quá cao, scale lại theo chiều cao
       if (height > availableHeight) {
         height = availableHeight;
-        width = height / A4_RATIO;
-
-        // Nếu width sau khi scale vẫn nhỏ hơn available, tăng lên
-        if (width < availableWidth * 0.95) {
-          width = availableWidth * 0.95;
-          height = width * A4_RATIO;
-
-          // Đảm bảo không vượt quá height
-          if (height > availableHeight) {
-            height = availableHeight;
-            width = height / A4_RATIO;
-          }
-        }
+        width = height / 1.414;
+      }
+    } else if (isTablet) {
+      // Tablet: cân bằng
+      width = Math.min(availableWidth * 0.8, 700);
+      height = width * 1.414;
+      
+      if (height > availableHeight) {
+        height = availableHeight * 0.85;
+        width = height / 1.414;
       }
     } else {
-      // Desktop/Tablet: 2 trang, cần tính cho cả 2 trang cùng lúc
-      const singlePageWidth = availableWidth / 2 - 20; // Trừ spacing giữa 2 trang
-      const singlePageHeight = singlePageWidth * A4_RATIO;
-
-      // Kiểm tra xem height có vừa không
-      if (singlePageHeight <= availableHeight) {
-        width = singlePageWidth;
-        height = singlePageHeight;
-      } else {
-        // Scale theo height
-        height = availableHeight;
-        width = height / A4_RATIO;
+      // Desktop: tối ưu cho 2 trang
+      const doublePageWidth = availableWidth / 2;
+      width = Math.min(doublePageWidth * 0.9, 600);
+      height = width * 1.414;
+      
+      if (height > availableHeight * 0.9) {
+        height = availableHeight * 0.9;
+        width = height / 1.414;
       }
     }
-
-    // Đảm bảo kích thước luôn là số nguyên và không quá nhỏ
-    return {
-      width: Math.max(Math.floor(width), isMobile ? 280 : 200),
-      height: Math.max(Math.floor(height), isMobile ? 380 : 280)
-    };
-  }, [isMobile]);
+    
+    return { width: Math.floor(width), height: Math.floor(height) };
+  }, [isMobile, isTablet]);
 
   const [dimensions, setDimensions] = useState(getResponsiveSize());
   const baseWidth = dimensions.width;
@@ -222,8 +205,8 @@ const PDFBook = () => {
       if (!bookRef.current) return;
       const pageFlip = bookRef.current.pageFlip();
 
-      if (action === "first") pageFlip.flip(0); // Cover page
-      else if (action === "last") pageFlip.flip(numPages); // Vì có thêm cover nên +1
+      if (action === "first") pageFlip.flip(0);
+      else if (action === "last") pageFlip.flip(numPages - 1);
       else if (action === "next") pageFlip.flipNext();
       else if (action === "prev") pageFlip.flipPrev();
     },
@@ -232,52 +215,24 @@ const PDFBook = () => {
 
   // ← SỬA: Thay đổi kiểu dữ liệu từ any sang đúng type
   const handleFlip = useCallback((e) => {
-    // e.data là index của trang hiện tại (bắt đầu từ 0)
-    // Page 0 = Custom Cover
-    // Page 1 = PDF page 1, Page 2 = PDF page 2, etc.
-    const actualPdfPage = e.data; // Vì có cover nên trừ đi để hiển thị đúng số trang PDF
-    setCurrentPage(actualPdfPage);
-
+    setCurrentPage(e.data + 1);
     // Delay để DOM render xong trang mới rồi center
     setTimeout(() => {
       transformRef.current?.centerView();
     }, 150);
   }, []);
 
-  // Pre-render tất cả các trang với custom cover page
+  // Pre-render tất cả các trang
   const pages = useMemo(() => {
     if (!numPages) return [];
-
-    // Tạo custom cover page với ảnh
-    const coverPage = (
-      <div
-        key="custom-cover"
-        className="bg-white shadow-2xl rounded-sm overflow-hidden relative"
-        style={{ width: baseWidth, height: baseHeight }}
-      >
-        <img
-          src="/image/ll.jpg"
-          alt="Cover"
-          className="w-full h-full object-cover"
-          style={{ objectFit: 'cover' }}
-        />
-      </div>
-    );
-
-    // Tạo các trang PDF
-    const pdfPages = Array.from({ length: numPages }, (_, i) => (
+    return Array.from({ length: numPages }, (_, i) => (
       <PDFPage
-        key={`pdf-${i}`}
+        key={i}
         pageNumber={i + 1}
         width={baseWidth}
         height={baseHeight}
       />
     ));
-
-    // Kết hợp: [Cover] + [PDF pages]
-    // Desktop: Cover sẽ hiển thị cùng PDF trang 1
-    // Mobile: Cover riêng, sau đó các trang PDF
-    return [coverPage, ...pdfPages];
   }, [numPages, baseWidth, baseHeight]);
 
   // Handle mouse down - bắt đầu theo dõi
@@ -361,22 +316,46 @@ const PDFBook = () => {
           justify-content: center;
         }
 
-        /* Fix cho flipbook - fit perfect mọi màn hình */
+        /* Fix cho flipbook - responsive */
         .flipbook {
+          max-width: 100% !important;
+          max-height: 100% !important;
           margin: 0 auto;
-          display: block;
         }
 
         .flipbook > * {
-          max-width: 100%;
-          max-height: 100%;
-          object-fit: contain;
+          max-width: 100% !important;
+          max-height: 100% !important;
         }
 
-        /* Đảm bảo container luôn center và không overflow */
-        .pdf-container > * {
-          max-width: 100%;
-          max-height: 100%;
+        /* Landscape mobile fix */
+        @media screen and (max-width: 768px) and (orientation: landscape) {
+          .flipbook {
+            max-height: 85vh !important;
+          }
+        }
+
+        /* Tablet optimization */
+        @media screen and (min-width: 769px) and (max-width: 1024px) {
+          .flipbook {
+            max-width: 90vw !important;
+            max-height: 80vh !important;
+          }
+        }
+
+        /* Large screen optimization */
+        @media screen and (min-width: 1025px) {
+          .flipbook {
+            max-width: min(1400px, 90vw) !important;
+            max-height: 85vh !important;
+          }
+        }
+
+        /* Ultra-wide screen */
+        @media screen and (min-width: 1920px) {
+          .flipbook {
+            max-width: 1600px !important;
+          }
         }
 
         @media print {
@@ -388,7 +367,7 @@ const PDFBook = () => {
 
       <Header />
 
-      <div className="flex-1 flex items-center justify-center overflow-hidden p-1 sm:p-4 relative">
+      <div className="flex-1 flex items-center justify-center overflow-hidden p-2 sm:p-4 relative">
         <TransformWrapper
           ref={transformRef}
           initialScale={1}
@@ -428,24 +407,24 @@ const PDFBook = () => {
                     {numPages && (
                       <HTMLFlipBook
                         ref={bookRef}
-                        size="fixed"
+                        size={isMobile ? "stretch" : "fixed"}
                         width={baseWidth}
                         height={baseHeight}
-                        minWidth={baseWidth}
-                        maxWidth={baseWidth}
-                        minHeight={baseHeight}
-                        maxHeight={baseHeight}
+                        minWidth={isMobile ? baseWidth * 0.8 : 280}
+                        maxWidth={isMobile ? baseWidth : isTablet ? 800 : 1200}
+                        minHeight={baseHeight * 0.8}
+                        maxHeight={baseHeight * 1.2}
                         maxShadowOpacity={0.5}
-                        showCover={false}
+                        showCover={isMobile ? false : true}
                         mobileScrollSupport={false}
                         flippingTime={800}
-                        usePortrait={isMobile ? true : false}
+                        usePortrait={isMobile}
                         drawShadow={!isMobile}
                         onFlip={handleFlip}
                         className="flipbook shadow-2xl"
                         startPage={0}
                         clickEventForward={!isDragging}
-                        autoSize={false}
+                        autoSize={true}
                         swipeDistance={isMobile ? 50 : 30}
                       >
                         {pages}
